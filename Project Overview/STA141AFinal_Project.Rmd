@@ -1,0 +1,384 @@
+---
+title: "STA141A Group 15 Final Project"
+author: "Collin Chee, Love Chien, Sharon Wong, Yixuan Deng"
+date: "12/14/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = F,
+                      warning = F)
+```
+
+
+# Background
+We reviewed the research paper Using Data Mining for Bank Direct Marketing: An Application of the CRISP-DM Methodology from which the bank dataset came from. The data mining strategies used in the paper to analyze the dataset are Naïve Bayes, Decision Trees and Support Vector Machines (SVM). Due to the large size of the dataset, the number of variables were reduced using the rattle tool, and missing values were omitted. In this paper, the researchers discovered that SVM produced the best predictive results with a high value of 0.9 of area under its ROC curve.
+
+Citation: S. Moro, R. Laureano and P. Cortez. Using Data Mining for Bank Direct Marketing: An Application of the CRISP-DM Methodology.
+
+
+## Statistical Question of Interest
+We will be analyzing the same bank dataset mentioned above to answer what factors are the most important towards whether a person will sign a long term deposit. We will also analyze what model will best predict the final person's outcome. Specifically, we want to know about the people of Portugal.
+
+Two answer these two questions, we will be using Logistic Regression, RandomForest, and AdaBoost to model how likely it is a for a person to sign a long term deposit.  The reason these three methods were chosen was because each model can work with contiuous and categorical variables. In this data set, the variable "y" is the outcome with the outcomes "yes" or "no". The Logistic Regression method was chosen due to its flexibility and its ability to measure the direction and significance of predictors. The RandomForest method should also be a good fit because it is collection of many decision trees that can take multiple nodes to come to a final solution. The final method, Adaboost(Extra Credit), is a slight alternative to decision trees and is a boosting that can weigh many small trees to compute a final outcome. 
+
+# Analysis Plan
+We will be using a 70:30 training/test split to build our models. We will be conducting Logistic and RF on the bank-full and the smaller bank dataset and compare their results. However, we will only conduct the Adaboost on the bank data set due to the large amount of time it takes to train on the entire dataset. At the end, we will compare all three methods by providing classification accuracy results and their confusion matrices.
+
+## Population of Interest
+The population of interest is the entire adult residents of Portugal who have a bank account. This study samples around 45 thousand people who were called by phone and their personal information have also been collected. The sample was also collected from 2008-2010. Although the number of observations is small compared to the entire population which is probably in the millions, 45 thousand is a very large number of observations and should be sufficient enough to represent the entire population. 
+
+## Descriptive Analysis Plan
+
+We will ook at three predictors we think will be important. The first predictor is the age because it is important to see what the average and median age was when it comes to making financial decisions. We will also be looking at people's balance and duration. 
+
+## Inferential Analysis Plan
+For Logistic Regression, we will first build a model using the glm function. Then, we will provide a summary of all the predictors and point out which predictors seems to contribute the most towards the final decision. Then, we will provide a confusion matrix and the accuracy of the model
+
+Similarly, we will build a RandomForest model using the rf function. Instead of a summary box, we can use the importance plot to analyze the gini index. This will work analogously like the p values from the logistic plot as we then can see what predictors are the most "important". 
+
+### Extra Credit
+We will finally use the adaboost method from the fastAdabag package to analyze the smaller bank.csv dataset. As mentioned before, the smaller dataset is used as it takes to long to run on the full dataset. A confusion matrix, sample classifier (separate file only), and accuracy will be displayed. 
+
+
+# Results
+## Descriptive Analysis
+```{r include=FALSE}
+library(qwraps2)
+options(qwraps2_markup = "markdown")
+
+```
+```{r}
+bank_full<-read.table("bank-full.csv",head=TRUE,sep = ';')
+```
+```{r include=FALSE}
+
+
+
+bank_sum2 <-summary_table(bank_full[, c("duration", "age", "balance")])
+bank_sum3 <- qable(bank_sum2, markup = "markdown")
+
+
+```
+```{r descript}
+bank_sum3
+```
+To read the table, duration's statistics come first, followed by age, and then finally balance.
+
+We notice that the last contact duration amount in seconds is around 260 seconds, and the median was 3 minutes. The average age was around 40 years old with the median being very close at 39 years of age. The average yearly balance was 1362 euros and the median being 448. The negative amount of euros could signifify that people are in debt and owe money to the bank. 
+
+## Inferential Analysis
+
+### Logistic Regression
+
+We choose this method because it is a type of supervised learning which fits this data set. In the bank-full and bank data set, we have our response outcome, either "yes" the client has subscribed a term deposit or "no" the client has not subscribed a term deposit. The logistic regression allows us to use create a model based on our training data, which we can then apply to our test data to create predictions. The logistic regression is great because it provides a measure of how appropriate a predictor is (coefficient size) and also its direction of association (positive or negative). Therefore, with logistic regression, we know what predictor variables are the most important in our model and is driving the predictions the most. 
+
+
+
+
+```{r, include=FALSE}
+library(dplyr)
+library(caret)
+
+set.seed(1)
+```
+
+```{r}
+bank_full$y<-as.factor(bank_full$y) #set up train and test set
+```
+
+```{r}
+train = bank_full %>%
+  sample_frac(0.7)
+
+test = bank_full %>%
+  setdiff(train)
+```
+
+```{r}
+logit_mod <- glm(y ~., data = train, family = 'binomial') #logistic model
+
+summary(logit_mod) 
+```
+
+From this summary, we can see that the most important feature that will determine whether the client will or will not subscribe a term deposit is the outcome of the previous marketing campaign, specifically if the previous marketing campaign outcome was categorized as "success", which has a coefficient of 2.3,  then the client will likely subscribe a term deposit. Other important features that have a large influence on the outcome is last contact month, specifically if the last contact was in March, which has a coefficient of 2.154. Other important months are January, June, October, and September with a coefficient of -1.09, 1.11, 1.75 and 1.24 respectively. In addition, if the client is unemployed, which has a coefficient of -1.2 or the type of contact communication is unknown, which has a coefficient of -1.512, the client is likely to not subscribe a3 term deposit. 
+
+```{r, include=FALSE}
+test2<- test %>% 
+  mutate(y = recode(y,
+                          yes = 1.0,
+                          no = 0.0))
+
+pdata1<-as.data.frame((predict(logit_mod,newdata=test2,type="response")))
+
+
+predictions <- pdata1 %>% 
+  mutate(g = ifelse(pdata1 >= 0.5, "yes", "no"))
+
+
+predictions$g<-as.factor(predictions$g)
+```
+
+```{r}
+logit.conf=confusionMatrix(predictions$g, test$y) #confusion matrix
+logit.conf
+
+
+(logit.conf$table[1,1] + logit.conf$table[2,2])/sum(logit.conf$table) #classification accuracy
+```
+From our confusion matrix, we can see that our model has an 90% accuracy rate of predicting whether the client will say "yes" or "no" to subscribing to a term desposit, which means that our model is pretty good.
+
+
+
+
+
+### Decision Tree analysis for bank-full dataset
+
+Here is an example of a single classification tree using the entire dataset.
+
+### Classification tree
+
+```{r include=FALSE}
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+```
+```{r}
+# classification tree
+ct<-rpart(y~.,data=bank_full)
+# plot
+rpart.plot(ct)
+```
+
+Confusion matrix:
+
+```{r}
+# prediction
+pred<-predict(ct,bank_full,type='class')
+# confusion matrix
+confuse<-table(bank_full$y,pred)
+confuse
+#variance
+var1<-var(predict(ct)[,1])
+```
+
+Accuracy is `r paste0(round(sum(diag(confuse))/nrow(bank_full),4)*100,'%')`.
+
+Variance of this specific classification tree on the full dataset is `r var1`
+
+
+
+
+### RandomForest
+
+Now, we use RandomForest. This allows us to build multiple decision trees that have random number of predictors. Although the one classification tree above may show a good accuracy, it is very sensitive towards just the full dataset itself. RandomForest will allows many different decision trees that produce class predictions. Each tree will have an equal amount of say, and the class with the most votes will be the model's prediction.
+
+```{r}
+# model building 
+train$y <- as.factor(train$y)
+rf<-randomForest(y~.,data=train,ntree=100)
+# importance plot
+varImpPlot(rf,main='Importance of Variables for Random forest')
+```
+
+Confusion matrix:
+
+```{r}
+pred<-predict(rf,test,type='class')
+confuse<-table(test$y,pred)
+confuse
+# variance
+var3<-var(predict(rf,type='prob')[,1])
+```
+
+Accuracy is `r paste0(round(sum(diag(confuse))/nrow(test),4)*100,'%')`.
+
+
+According to the importance plot, the most powerful predictors are duration, balance, and age. Although the accuracy for a single classification tree had a similar accuracy, this does not mean that the single classification is better because the tree was a fit for the entire data set. This means that for future data, it may be too overfit to do well with future data. The random forest may not be completely accurate, but it should do a better job modeling any future data. 
+
+Comparing the RandomForest Model vs. the Logistic Model, the logistic model will be a little more flexible compared to the RandomForest as the logistic model computes the probability of an outcome being close to 1 (yes) or 0 (no). The RF model is more strict as the results are strictly yes or no. In this data, the logistic regression model edges out the RF model by one percent. Nevertheless, both models do a good job of predicting the correct outcome as most people do say no.
+
+### Which type of clients will sign a long-term deposit
+
+```{r}
+# data descriptive plot
+bank_full%>%ggplot(aes(x=y,y=log(duration),fill=y))+geom_boxplot()
+```
+
+Data descriptive plot would also reveal that obviously difference of duration, the most important predictor, is really existed between `yes` and `no` for response variable. According to the boxplot, longer duration is, more probability the client would sign on to a long-term deposit.
+
+
+
+Now we apply the logistic and randomForest method to the bank.csv dataset because we want to be able to
+compare our method with the Adaboost method (Extra Credit). We are using a smaller dataset because it takes too long to run the Adaboost method on a very large dataset.
+
+
+## Analysis using the smaller bank.csv dataset (To compare with Adaboost later)
+```{r} 
+bank<-read.table("bank.csv",head=TRUE,sep = ';')
+```
+
+```{r} 
+bank$y<-as.factor(bank$y) #training and testing set for smaller dataset
+```
+
+```{r}
+train_bank = bank %>%
+  sample_frac(0.7)
+
+test_bank = bank %>%
+  setdiff(train_bank)
+```
+
+```{r}
+logit_mod_bank <- glm(y ~., data = train_bank, family = 'binomial')
+
+summary(logit_mod_bank)
+```
+As we can see from the summary, the same predictors are the most significant.
+```{r include=FALSE}
+test2_bank<- test_bank %>% 
+  mutate(y = recode(y,
+                          yes = 1.0,
+                          no = 0.0))
+
+pdata1_bank<-as.data.frame((predict(logit_mod_bank,newdata=test2_bank,type="response")))
+
+
+predictions_bank <- pdata1_bank %>% 
+  mutate(gb = ifelse(pdata1_bank >= 0.5, "yes", "no"))
+
+
+predictions_bank$gb<-as.factor(predictions_bank$gb)
+```
+
+```{r}
+logit.conf_bank=confusionMatrix(predictions_bank$gb, test_bank$y)
+logit.conf_bank 
+#confusion matrix and accuracy
+
+(logit.conf_bank$table[1,1] + logit.conf_bank$table[2,2])/sum(logit.conf_bank$table)
+```
+
+
+
+### Classification tree
+
+```{r}
+bank <- read.table("bank.csv", head = T, sep = ";")
+library(rpart)
+library(rpart.plot)
+# classification tree
+ct<-rpart(y~.,data=bank)
+# plot
+rpart.plot(ct)
+```
+
+Confusion matrix:
+
+```{r}
+# prediction
+pred<-predict(ct,bank,type='class')
+# confusion matrix
+confuse<-table(bank$y,pred)
+confuse
+#variance
+var1<-var(predict(ct)[,1])
+```
+
+Accuracy is `r paste0(round(sum(diag(confuse))/nrow(bank),4)*100,'%')`.
+
+Variance of classification tree is `r var1`
+
+
+
+### Random forest
+
+```{r}
+# model building 
+train_bank$y <- as.factor(train_bank$y)
+rf<-randomForest(y~.,data=train_bank,ntree=100)
+# importance plot
+varImpPlot(rf,main='Importance of Variables for Random forest')
+```
+
+Confusion matrix:
+
+```{r}
+pred<-predict(rf,test_bank,type='class')
+confuse<-table(test_bank$y,pred)
+confuse
+# variance
+var3<-var(predict(rf,type='prob')[,1])
+```
+
+Accuracy is `r paste0(round(sum(diag(confuse))/nrow(test_bank),4)*100,'%')`.
+
+Besides, variance of Bagging tree is also calculated as `r var3`
+
+According to the three tree based model, the most predictor is still duration.
+
+
+
+
+## AdaBoost (Extra Credit)
+
+We also used the AdaBoost method to analyze the data AdaBoost works great with multiple 
+parameters. This boosting method will make numerous one node trees, also known as "stumps" or weak classifiers, and weigh
+them differently to come to a conclusion of whether the outcome is yes or no. The key differeces between AdaBoost and RandomForest are that Adaboost only consists of small stumps and each stump's weights are different. In RandomForest, each tree is weighed the same. 
+
+Because there are so many paramters, and that each weak classifier depends on the previously bootstrapped data set, Adaboost will be able to create hundreds of different iterations of weak classifiers. Unfortunately, we could only use AdaBoost on the bank.csv file because it takes way too long to run on the full dataset.
+
+```{r results='hide', message=FALSE, error=FALSE, include=FALSE}
+library(readr)
+library(tidyverse)
+library(fastAdaboost)    #adaboost function       
+library(adabag)
+```
+```{r adaboost}
+
+
+test_adaboost <- adaboost(y~., data=train_bank,500) #use adaboost function from fastAdaboost package
+
+
+pred <- predict(test_adaboost,newdata= test_bank)
+
+
+
+```
+According to sources online, an estimate of 100-1000 iterations is considered "safe". 
+We can also fetch a single weak decision tree classifier by using the get_tree function. Here is the code for 7th weak tree classifier which is considered part of the strong classifier. The summary for tree will be shown in a separate document in the zip folder as it is very long.
+```{r tree}
+tree <- get_tree(test_adaboost, 7)
+```
+\newpage
+
+```{r confusion}
+confusion_matrix <- table(pred$class,test_bank$y)
+confusion_matrix
+accuracy <- (confusion_matrix[1,1] + confusion_matrix[2,2])/ sum(confusion_matrix)
+accuracy
+
+```
+
+# Comparison Between Each Method
+
+RandomForest Accuracy - `r paste0(round(sum(diag(confuse))/nrow(test_bank),4)*100,'%')`
+
+Logistic Regression Accuracy - `r paste0(round((logit.conf_bank$table[1,1] + logit.conf_bank$table[2,2])/sum(logit.conf_bank$table)*100,4), '%')`
+
+Adaboost Accucracy - `r paste0(round(accuracy*100,4), '%' )`
+
+# Conclusion 
+All three methods show a very similar classification accuracy as all three accuracies hovered around 90%. When comparing Logistic and RandomForest methods wtih the full datasets, the classification accuracy for both methods was also very close to 90%. We were suprised by how well each method modeled the data.
+
+Some key differences between the Logistic and the RandomForest Models is which variables have a more significant effect on the final outcome. For the Logistic Model, predictors such as campaign outcome, last contact month, and employment play a huge factor in the final predictions. In RandomForest, predictors such as last contact duration, age, and current balance contribute more towards a person's decision to saying yes or no. It is hard to analyze which predictor stands out the most in the AdaBoost method as each iteration will start with a random predictor, and the following predictors' weights will depend on the previous predictor's weights. However, in all three models, they have very strong classification accuracies and they all mainly predict that an average person would say "no" to signing long term deposit.
+
+
+
+
+
